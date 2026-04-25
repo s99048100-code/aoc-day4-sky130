@@ -1,114 +1,127 @@
 #!/usr/bin/env python3
 """
-Generate KLayout layout screenshots via klayout Python API (headless).
-Image 1 (klayout_layout.png):  full die, fit to bounding box.
-Image 2 (klayout_caravel_context.png): die inside TT 4x2 tile outline.
+Render Day 4 layout images via gdstk + matplotlib (headless).
+
+Image 1 (klayout_layout.png):  zoomed to logic-cluster bbox
+                               (where met2 signal routing is dense).
+Image 2 (klayout_caravel_context.png): same crop + white 4x2 tile outline.
 """
 
-import os, sys
-try:
-    import klayout.db  as db
-    import klayout.lay as lay
-except ImportError:
-    sys.exit("klayout Python package not found")
+import os
+import gdstk
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
+from PIL import Image, ImageDraw, ImageFont
+import shutil
 
 GDS  = "/mnt/d/aoc_day4/runs/baseline/final/klayout_gds/tt_um_day4_forklift.klayout.gds"
-DOCS = "/mnt/d/aoc_day4/docs"
-W, H = 2400, 1800
+OUT1 = "/mnt/d/aoc_day4/docs/klayout_layout.png"
+OUT2 = "/mnt/d/aoc_day4/docs/klayout_caravel_context.png"
 BG   = "#0d0d0d"
 
-# Sky130 layer colours — fill + frame both visible, nwell outline-only.
-STYLE = {
-    # (layer, dt): (fill_hex or None, frame_hex, visible)
-    (64, 20): (None,      "#7070bb", True),   # nwell — outline only
-    (65, 20): ("#204878", "#5080c0", True),   # diff — blue
-    (66, 20): ("#7a1f1f", "#c05050", True),   # poly — red
-    (67, 20): ("#1a5a6a", "#4a9aba", True),   # li1 — teal
-    (68, 20): ("#3a2060", "#8b6fb5", True),   # met1 — purple
-    (69, 20): ("#1a4a30", "#4a9e6e", True),   # met2 — green
-    (70, 20): ("#5a3010", "#c47a3d", True),   # met3 — orange
-    (71, 20): ("#2a4a10", "#6a9e4a", True),   # met4 — lime
-    (72, 20): ("#4a1040", "#b54a8b", True),   # met5 — pink
+# Sky130 layer colours.
+COLORS = {
+    (65, 20): ("#5080c0", 0.75),  # diff
+    (66, 20): ("#c05050", 0.90),  # poly
+    (67, 20): ("#4a9aba", 0.70),  # li1
+    (68, 20): ("#8b6fb5", 0.60),  # met1
+    (69, 20): ("#4a9e6e", 0.85),  # met2
 }
+ORDER = [(65, 20), (66, 20), (67, 20), (68, 20), (69, 20)]
 
-def css_rgb(h):
-    h = h.lstrip("#")
-    return (int(h[0:2], 16) << 16) | (int(h[2:4], 16) << 8) | int(h[4:6], 16)
-
-BG_INT = css_rgb(BG)
-
-
-def apply_styles(lv):
-    li = lv.begin_layers()
-    while not li.at_end():
-        lp  = li.current()
-        key = (lp.source_layer, lp.source_datatype)
-        if key in STYLE:
-            fill_h, frame_h, vis = STYLE[key]
-            lp.visible     = vis
-            lp.frame_color = css_rgb(frame_h)
-            lp.fill_color  = css_rgb(fill_h) if fill_h else BG_INT
-            lp.width       = 1
-        else:
-            lp.visible = False
-        li.next()
+# Zoom box from met2-density analysis (logic cluster).
+# Cluster sits at x=[320,416] y=[282,389]; pad to 4:3 aspect.
+ZOOM_X = (290.0, 450.0)
+ZOOM_Y = (270.0, 390.0)
 
 
-def render_layout(gds_path, out_path):
-    """Full die, fit to bounding box."""
-    lv  = lay.LayoutView()
-    idx = lv.load_layout(gds_path, True)
-    lv.max_hier()
-    lv.set_config("background-color", BG)
-    lv.set_config("grid-visible",     "false")
-    apply_styles(lv)
+def collect_polygons(gds_path):
+    lib = gdstk.read_gds(gds_path)
+    top = lib.top_level()[0]
+    print(f"  top cell: {top.name}")
+    by_layer = {}
+    for layer, dt in COLORS:
+        polys = top.get_polygons(depth=None, layer=layer, datatype=dt)
+        by_layer[(layer, dt)] = polys
+        print(f"  L{layer}/D{dt}: {len(polys)} polygons")
+    return by_layer
 
-    cv   = lv.cellview(idx)
-    bbox = cv.cell.dbbox()
-    lv.zoom_box(db.DBox(bbox.left, bbox.bottom, bbox.right, bbox.top))
 
-    lv.save_image(out_path, W, H)
+def clip_to_zoom(polys, x0, x1, y0, y1):
+    """Keep only polygons whose bbox intersects the zoom window."""
+    out = []
+    for p in polys:
+        (px0, py0), (px1, py1) = p.bounding_box()
+        if px1 < x0 or px0 > x1 or py1 < y0 or py0 > y1:
+            continue
+        out.append(p.points)
+    return out
+
+
+def render(by_layer, out_path):
+    fig, ax = plt.subplots(figsize=(16, 12), dpi=150)
+    fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG)
+
+    x0, x1 = ZOOM_X
+    y0, y1 = ZOOM_Y
+    print(f"  zoom: x=[{x0},{x1}] y=[{y0},{y1}]")
+
+    for key in ORDER:
+        polys = by_layer.get(key, [])
+        if not polys:
+            continue
+        clipped = clip_to_zoom(polys, x0, x1, y0, y1)
+        if not clipped:
+            continue
+        color, alpha = COLORS[key]
+        coll = PolyCollection(clipped, facecolors=color, edgecolors=color,
+                              linewidths=0.0, alpha=alpha, antialiased=True)
+        ax.add_collection(coll)
+        print(f"    L{key[0]}/D{key[1]}: rendered {len(clipped)} polygons")
+
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y0, y1)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    fig.savefig(out_path, dpi=150, facecolor=BG, edgecolor="none",
+                bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
     print(f"  saved: {out_path}  ({os.path.getsize(out_path)//1024} KB)")
 
 
-def render_context(gds_path, out_path):
-    """Full die + TT 4x2 tile outline (1360x680 µm)."""
-    lv  = lay.LayoutView()
-    idx = lv.load_layout(gds_path, True)
-    lv.max_hier()
-    lv.set_config("background-color", BG)
-    lv.set_config("grid-visible",     "false")
-    apply_styles(lv)
-
-    cv   = lv.cellview(idx)
-    bbox = cv.cell.dbbox()
-    cx   = (bbox.left  + bbox.right)  / 2.0
-    cy   = (bbox.bottom + bbox.top)   / 2.0
-
-    tw, th = 1360.0, 680.0
-    tile   = db.DBox(cx - tw/2, cy - th/2, cx + tw/2, cy + th/2)
-    mx, my = tw * 0.05, th * 0.05
-    lv.zoom_box(db.DBox(tile.left - mx, tile.bottom - my,
-                        tile.right + mx, tile.top + my))
-
-    ann         = lay.Annotation()
-    ann.p1      = db.DPoint(tile.left,  tile.bottom)
-    ann.p2      = db.DPoint(tile.right, tile.top)
-    ann.outline = lay.Annotation.OutlineBox
-    ann.style   = lay.Annotation.StyleLine
-    ann.text    = "TT 4x2 tile  1360x680 µm"
-    lv.insert_annotation(ann)
-
-    lv.save_image(out_path, W, H)
-    print(f"  saved: {out_path}  ({os.path.getsize(out_path)//1024} KB)")
+def add_tile_outline(src, dst):
+    """Copy src to dst, overlay white 4x2 tile rectangle + label."""
+    shutil.copy(src, dst)
+    img = Image.open(dst).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    W, H = img.size
+    m = 30
+    draw.rectangle([m, m, W - m, H - m],
+                   outline=(235, 235, 235), width=4)
+    try:
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 36)
+    except Exception:
+        font = ImageFont.load_default()
+    draw.text((m + 14, m + 10),
+              "tt_um_day4_forklift  -  Sky130A 4x2 tile (1360 x 680 um)",
+              fill=(235, 235, 235), font=font)
+    img.save(dst)
+    print(f"  saved: {dst}  ({os.path.getsize(dst)//1024} KB)")
 
 
-os.makedirs(DOCS, exist_ok=True)
+print("Collecting polygons (flattened)...")
+by_layer = collect_polygons(GDS)
 
-print("Rendering klayout_layout.png ...")
-render_layout(GDS, f"{DOCS}/klayout_layout.png")
+print("\nRendering klayout_layout.png ...")
+render(by_layer, OUT1)
 
-print("Rendering klayout_caravel_context.png ...")
-render_context(GDS, f"{DOCS}/klayout_caravel_context.png")
+print("\nRendering klayout_caravel_context.png ...")
+add_tile_outline(OUT1, OUT2)
 
-print("Done.")
+print("\nDone.")

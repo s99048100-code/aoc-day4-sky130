@@ -22,16 +22,16 @@ s_tvalid/s_tdata  ──►  [tt_um_day4_forklift]  ──►  m_tvalid/m_tdata
 ### FSM
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': {'darkMode':true, 'background':'#000000', 'primaryColor':'#1e293b', 'primaryTextColor':'#f8fafc', 'primaryBorderColor':'#94a3b8', 'lineColor':'#cbd5e1'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': {'darkMode':true, 'background':'#000000', 'primaryColor':'#1e293b', 'primaryTextColor':'#f8fafc', 'primaryBorderColor':'#94a3b8', 'lineColor':'#cbd5e1', 'mainBkg':'#1e293b'}}}%%
 stateDiagram-v2
     [*] --> IDLE
     IDLE --> RX : s_tvalid
     RX --> PART1 : 8 bytes received
-    PART1 --> P2_SCAN : part1 done
-    P2_SCAN --> P2_REMOVE : mark done
+    PART1 --> P2_SCAN : part1 counted
+    P2_SCAN --> P2_REMOVE : marks ready
     P2_REMOVE --> STABLE : removed
-    STABLE --> TX : mark_count == 0
     STABLE --> P2_SCAN : mark_count > 0
+    STABLE --> TX : mark_count == 0
     TX --> [*]
 ```
 
@@ -189,3 +189,4 @@ Puzzle input: https://adventofcode.com/2025/day/4/input
 ---
 
 Related: [sky130-aoc-day12-backend](https://github.com/s99048100-code/sky130-aoc-day12-backend) — backend study on an existing RTL; this repo is the follow-up with original RTL.
+
