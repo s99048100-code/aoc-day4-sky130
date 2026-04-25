@@ -1,0 +1,39 @@
+# AoC policy: puzzle input not shared
+puzzle_input.txt
+
+# Ignore everything inside runs/ by default
+runs/**
+
+# Whitelist only what we want
+!runs/
+!runs/baseline/
+!runs/baseline/final/
+!runs/baseline/final/metrics.json
+!runs/baseline/final/metrics.csv
+!runs/baseline/final/gds/
+!runs/baseline/final/gds/*.gds
+!runs/baseline/final/klayout_gds/
+!runs/baseline/final/klayout_gds/*.gds
+!runs/aggressive/
+!runs/aggressive/final/
+!runs/aggressive/final/metrics.json
+!runs/aggressive/flow.log
+
+# OpenLane runs inside src/
+src/runs/
+
+# Build / sim artifacts
+test/sim_build/
+test/results.xml
+test/*.vcd
+
+# Python
+**/__pycache__/
+**/.venv*/
+*.pyc
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

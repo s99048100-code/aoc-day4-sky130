@@ -1,0 +1,24 @@
+Grid: 136 x 136  (12038 scrolls total)
+Part 1 (initial accessible):      1464
+Part 2 (total removed, stable):   8409
+Iterations until stable:          47
+Removed per iteration:            [1464, 1072, 869, 720, 606, 513, 433, 395, 331, 272, 231, 214, 167, 147, 145, 118, 98, 72, 58, 52, 50, 47, 46, 35, 33, 31, 31, 22, 14, 14, 14, 11, 13, 11, 11, 11, 8, 6, 6, 3, 2, 3, 3, 4, 1, 1, 1]
+[full puzzle] dims = 136 x 136
+[full puzzle] Part 1 = 1464  (expected 1464)  OK
+[full puzzle] Part 2 = 8409  (expected 8409)  OK
+
+========================================================================================
+case                     grid_hex                 p1   p2  iter  check     
+========================================================================================
+01_empty                 00 00 00 00 00 00 00 00    0    0     0  ok        
+02_full                  ff ff ff ff ff ff ff ff    4    4     1  ok        
+03_checker               aa 55 aa 55 aa 55 aa 55   14   32     4  ok        
+04_corner_single         01 00 00 00 00 00 00 00    1    1     1  ok        
+05_center_surrounded     00 00 1c 1c 1c 00 00 00    4    9     3  ok        
+06_3x3_block             00 00 1c 1c 1c 00 00 00    4    9     3  ok        
+07_two_clusters          03 03 00 00 00 00 c0 c0    8    8     1  ok        
+08_puzzle_window         6e ff 75 7f 7e 78 1f f8    9   33     9  ok        
+========================================================================================
+
+FULL PUZZLE: PASS
+REGRESSION : PASS
