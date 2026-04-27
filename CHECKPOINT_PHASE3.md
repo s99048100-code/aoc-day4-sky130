@@ -10,18 +10,14 @@ Plan file: `~/.claude/plans/dazzling-painting-deer.md`
 | M2 | README architecture rationale + critical-path analysis | ✓ done |
 | M3 | cocotb 1024-vector random regression + iter histogram | ✓ done (1024/1024 PASS, 6.39s) |
 | M4 | Yosys SAT formal property check (FSM safety + bounds) | ✓ done (12-cycle BMC PASS in 7s) |
-| M5 | 2-stage pipelined RTL variant (stretch) | pending |
+| M5 | 2-stage pipelined RTL variant + sim verification | ✓ done (1024/1024 PASS, +19% sim latency) |
 
-## Resume command
+## All milestones complete
 
-Next session: pick up M5 (2-stage pipelined RTL variant).
-- Create `src/project_pipelined.v` — same module name `tt_um_day4_forklift`, but register `nbr_count_q[r][c]` between `grid` and `mark`.
-- Add `VARIANT ?= baseline` to `test/Makefile` so `VARIANT=pipelined make` swaps the source.
-- Run cocotb on the pipelined variant — must still match golden model (latency may differ but P1/P2 results identical).
-- Optional: run OpenLane2 at 100 MHz on the pipelined variant; if it closes, append column to `ppa_compare.md`.
-- Commit: `rtl: add 2-stage pipelined variant + sim verification`.
-
-M5 is a **stretch goal** — defer if token budget tight.
+Optional follow-ups:
+- Run OpenLane2 at 100 MHz on `src/project_pipelined.v` to demonstrate the predicted SS WNS recovery (from −13 ns to ≈ −2 ns).
+- Add `formal_log.txt` of pipelined variant (separate `forklift_pipelined.ys`).
+- Submit to a real Tiny Tapeout shuttle (TT10/TT11).
 
 ## Push convention
 Use **PowerShell** git (Windows Credential Manager); WSL git hangs on auth prompt.

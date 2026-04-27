@@ -194,7 +194,7 @@ To close 100 MHz the combinational sweep must be split. Two options, neither imp
 | Register `nbr_count[r][c]` | 2 | 2× | +256 (4-bit × 64) | ~−2 ns (close-able with retiming) |
 | Process 2-row strips serially | 4 | 4× | +128 | clean MET at SS |
 
-The 2-stage variant is sketched in M5 of `CHECKPOINT_PHASE3.md` but defers to future work; the baseline RTL is intentionally kept single-cycle for clarity.
+The 2-stage variant is implemented in `src/project_pipelined.v` — see **Pipelined Variant** below.
 
 ---
 
@@ -222,6 +222,29 @@ Full comparison: `ppa_compare.md`.
 
 ---
 
+## Pipelined Variant
+
+`src/project_pipelined.v` registers the per-cell `mark` between the neighbour-count + comparator stage and the peel + popcount stage. This breaks the SS critical path roughly in half at the cost of one extra cycle per peel iteration.
+
+| | Baseline (`project.v`) | Pipelined (`project_pipelined.v`) |
+|---|---|---|
+| FSM states | 5 (IDLE, RX, COMPUTE, TX_P1, TX_P2) | 6 (IDLE, RX, **COUNT, PEEL**, TX_P1, TX_P2) |
+| Cycles per peel iter | 1 | 2 |
+| Combinational depth | grid → adder → cmp → AND → grid_n (~30 cells) | split: grid → adder → cmp → mark_q ;  mark_q → AND → grid_n |
+| Extra FF | — | +64 (`mark_q[0:7]`) |
+| cocotb 1024 random | 547620 ns @ 50 MHz | 644560 ns @ 50 MHz (+19% latency) |
+
+cocotb on the pipelined variant:
+
+```
+$ cd test && VARIANT=pipelined make
+TESTS=2 PASS=2 FAIL=0 SKIP=0
+```
+
+Bit-for-bit identical Part1/Part2 results vs. the baseline RTL. The pipelined variant is **simulated only** — re-running OpenLane2 at 100 MHz on it is left as future work; the path-length argument predicts SS WNS recovers from −13 ns to ≈ −2 ns, which retiming + buffer-up should close.
+
+---
+
 ## Layout
 
 ![layout](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_layout.png?v=3)
@@ -232,10 +255,14 @@ Full comparison: `ppa_compare.md`.
 
 ```
 src/
-  project.v              RTL — FSM + 8×8 cellular automaton core
+  project.v              RTL — FSM + 8×8 cellular automaton (single-cycle peel)
+  project_pipelined.v    RTL — 2-stage pipelined variant (1 extra cycle / iter)
 test/
-  test.py                cocotb regression (8 vectors)
-  Makefile               Icarus Verilog + cocotb runner
+  test.py                cocotb regression (8 directed + 1024 random)
+  Makefile               Icarus Verilog + cocotb runner; VARIANT=pipelined supported
+formal/
+  forklift.ys            yosys SAT BMC script (12-cycle proof from reset)
+  run_formal.sh          wrapper, tees output to docs/formal_log.txt
 runs/
   baseline/              50 MHz OpenLane2 run
     final/metrics.json
@@ -266,8 +293,13 @@ info.yaml                Tiny Tapeout project metadata
 # Golden model
 python day4_golden_model.py full-grid
 
-# cocotb regression
+# cocotb regression (baseline RTL)
 cd test && make
+# cocotb regression (pipelined variant)
+cd test && VARIANT=pipelined make
+
+# yosys formal proof (12-cycle BMC of safety + bound asserts)
+bash formal/run_formal.sh
 
 # Re-run PnR (baseline)
 openlane --run-all runs/baseline
