@@ -93,27 +93,81 @@ Baseline run: 50 MHz, OpenLane2 / Sky130A HD.
 | Hold WNS (FF min) | 0.107 ns (MET) |
 | Total power (TT nom) | 895.6 µW |
 
-SS corner fails (WNS −13.016 ns) — the `COMB_MARK` 64-cell combinational sweep is the critical path (~7–9 LUT levels). Pipelining the mark accumulator would recover the SS corner.
+SS corner fails (WNS −13.016 ns) — see **Critical Path** below.
+
+---
+
+## Architecture Rationale
+
+**Why 8×8?**  
+The TT user pin width is 8 (`ui_in[7:0]`). One byte = one row makes RX a clean 8-cycle stream with no packing logic. 64 cells fit in eight 8-bit registers — the entire grid is ~64 FF, comfortably small for a TT 4×2 tile.
+
+**Why fully-combinational `COMB_MARK`?**  
+Each iteration of the peel does: compute neighbour count for all 64 cells → mark accessible cells → accumulate `part2` → AND-NOT the mark back into `grid`. Doing the whole thing combinationally lets one peel iteration finish in one cycle. The full puzzle converges in ≤ 47 iterations, so worst-case compute = 47 cycles = 940 ns @ 50 MHz. Trades silicon area (parallel popcount × 64) for latency.
+
+**Bandwidth.**  
+RX = 8 bytes / 8 cycles = 50 MB/s sustained @ 50 MHz handshake. Compute = ≤ 64 cycles. TX = 2 bytes / 2 cycles. End-to-end window throughput = 1 window per ~76 cycles = 1.52 µs. The full 136×136 puzzle is 17×17 = 289 windows = 440 µs of pure HW time (ignoring host overhead).
+
+---
+
+## Critical Path (post-PNR STA, SS corner)
+
+From `runs/baseline/54-openroad-stapostpnr/max_ss_100C_1v60/max.rpt` — worst violated path:
+
+```
+Startpoint:  grid[0][2]  (FF Q, sky130_fd_sc_hd__dfxtp_4)
+Endpoint:    another grid[*][*] FF (mark feedback)
+WNS at SS:   −13.205 ns  (slack VIOLATED)
+Logic depth: ~30 cells along the path
+```
+
+The path traces the popcount of 8 Moore neighbours through a chain of `xor2/xnor2/a2111o/o211a` cells, then a `< 4` comparator, then the `grid AND ~mark` write-back. Roughly:
+
+```
+grid[r][c]  ──►  8× xor2/xnor2  ──►  popcount adder tree  ──►
+                     (~12 cells)        (~10 cells)
+            ──►  <4 comparator  ──►  AND ~mark  ──►  grid_n[r][c]
+                     (~4 cells)         (~2 cells)
+```
+
+At TT nominal, this measures ~20 ns / 50 MHz = MET (WNS 0.000). At SS the same logic blows out to ~33 ns due to slow PMOS, which is exactly the −13 ns slack.
+
+---
+
+## Why It Won't Run at 100 MHz
+
+The path above is fundamentally O(`adder_tree_depth + comparator + AND`). At 100 MHz (10 ns target) the logic levels alone exceed the budget at TT — confirmed by `−8.854 ns` WNS at TT in the aggressive run (which crashed at CTS, so the number is pre-CTS upper-bound; it is **not** comparable to the baseline post-route number, just an architectural ceiling).
+
+To close 100 MHz the combinational sweep must be split. Two options, neither implemented in this baseline:
+
+| Option | New stages | Iter latency | Δ FF | Expected SS WNS |
+|--------|-----------|--------------|------|-----------------|
+| Register `nbr_count[r][c]` | 2 | 2× | +256 (4-bit × 64) | ~−2 ns (close-able with retiming) |
+| Process 2-row strips serially | 4 | 4× | +128 | clean MET at SS |
+
+The 2-stage variant is sketched in M5 of `CHECKPOINT_PHASE3.md` but defers to future work; the baseline RTL is intentionally kept single-cycle for clarity.
 
 ---
 
 ## Re-running the Flow at 100 MHz
 
-Flow crashed at OpenROAD.CTS (step 34/~60). Numbers are post-global-placement, pre-CTS.
+> **Caveat:** the aggressive flow crashed at OpenROAD.CTS (step 34/74). The numbers below are from `stamidpnr` (step 30/74, post-global-placement, pre-CTS). They are **not** like-for-like with the baseline post-route numbers — clock skew, hold buffers, and final routing parasitics are missing. Read them as an architectural ceiling, not a final result.
 
-| Corner | Baseline WNS (50 MHz) | Aggressive WNS (100 MHz) |
-|--------|-----------------------|--------------------------|
+| Corner | Baseline WNS (50 MHz, post-route) | Aggressive WNS (100 MHz, pre-CTS) |
+|--------|-----------------------------------|------------------------------------|
 | TT nom | 0.000 ns | −8.854 ns |
 | SS nom | −13.016 ns | −25.838 ns |
 | FF nom | 0.000 ns | −1.322 ns |
 
-| Component | Baseline (µW) | Aggressive (µW) | Delta |
+Power numbers below are also pre-CTS for the aggressive column.
+
+| Component | Baseline (µW) | Aggressive pre-CTS (µW) | Delta |
 |-----------|--------------|-----------------|-------|
 | Internal | 547.4 | 752.0 | +204.5 |
 | Switching | 348.2 | 382.8 | +34.6 |
 | **Total** | **895.6** | **1134.7** | **+239.1** |
 
-100 MHz does not close at TT nominal. The design cannot run above 50 MHz without architectural changes.
+100 MHz does not close at TT even before CTS adds clock-tree pessimism, so this RTL is **not 100 MHz-capable** without the architectural change in *Why It Won't Run at 100 MHz* above.
 
 Full comparison: `ppa_compare.md`.
 
