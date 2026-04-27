@@ -37,3 +37,6 @@ test/*.vcd
 .idea/
 *.swp
 .DS_Store
+
+# Local-only progress notes (not for github)
+CHECKPOINT_PHASE3.md

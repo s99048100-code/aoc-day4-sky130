@@ -2,9 +2,11 @@
 """
 Render Day 4 layout images via gdstk + matplotlib (headless).
 
-Image 1 (klayout_layout.png):  zoomed to logic-cluster bbox
-                               (where met2 signal routing is dense).
-Image 2 (klayout_caravel_context.png): same crop + white 4x2 tile outline.
+Outputs four distinct views:
+  1. klayout_layout.png         - logic-cluster zoom (signal-routing detail)
+  2. klayout_full_die.png       - full 670x434 um die overview
+  3. klayout_power_grid.png     - met3/met4/met5 power distribution only
+  4. klayout_layer_breakdown.png- 2x2 panel showing poly/met1/met2/met3 alone
 """
 
 import os
@@ -18,110 +20,153 @@ from PIL import Image, ImageDraw, ImageFont
 import shutil
 
 GDS  = "/mnt/d/aoc_day4/runs/baseline/final/klayout_gds/tt_um_day4_forklift.klayout.gds"
-OUT1 = "/mnt/d/aoc_day4/docs/klayout_layout.png"
-OUT2 = "/mnt/d/aoc_day4/docs/klayout_caravel_context.png"
+DOCS = "/mnt/d/aoc_day4/docs"
 BG   = "#0d0d0d"
 
 # Sky130 layer colours.
 COLORS = {
-    (65, 20): ("#5080c0", 0.75),  # diff
-    (66, 20): ("#c05050", 0.90),  # poly
-    (67, 20): ("#4a9aba", 0.70),  # li1
-    (68, 20): ("#8b6fb5", 0.60),  # met1
-    (69, 20): ("#4a9e6e", 0.85),  # met2
+    (65, 20): ("#5080c0", 0.75, "diff"),
+    (66, 20): ("#c05050", 0.90, "poly"),
+    (67, 20): ("#4a9aba", 0.70, "li1"),
+    (68, 20): ("#8b6fb5", 0.60, "met1"),
+    (69, 20): ("#4a9e6e", 0.85, "met2"),
+    (70, 20): ("#c47a3d", 0.85, "met3"),
+    (71, 20): ("#6a9e4a", 0.80, "met4"),
+    (72, 20): ("#b54a8b", 0.80, "met5"),
 }
-ORDER = [(65, 20), (66, 20), (67, 20), (68, 20), (69, 20)]
-
-# Zoom box from met2-density analysis (logic cluster).
-# Cluster sits at x=[320,416] y=[282,389]; pad to 4:3 aspect.
-ZOOM_X = (290.0, 450.0)
-ZOOM_Y = (270.0, 390.0)
 
 
-def collect_polygons(gds_path):
-    lib = gdstk.read_gds(gds_path)
+def load_polys():
+    print("Reading GDS...")
+    lib = gdstk.read_gds(GDS)
     top = lib.top_level()[0]
     print(f"  top cell: {top.name}")
     by_layer = {}
     for layer, dt in COLORS:
         polys = top.get_polygons(depth=None, layer=layer, datatype=dt)
-        by_layer[(layer, dt)] = polys
-        print(f"  L{layer}/D{dt}: {len(polys)} polygons")
-    return by_layer
+        by_layer[(layer, dt)] = [p.points for p in polys]
+        print(f"  L{layer}/D{dt} ({COLORS[(layer,dt)][2]:>5}): {len(polys):>6} polys")
+    return top, by_layer
 
 
-def clip_to_zoom(polys, x0, x1, y0, y1):
-    """Keep only polygons whose bbox intersects the zoom window."""
+def clip(polys, x0, x1, y0, y1):
     out = []
-    for p in polys:
-        (px0, py0), (px1, py1) = p.bounding_box()
-        if px1 < x0 or px0 > x1 or py1 < y0 or py0 > y1:
+    for pts in polys:
+        if (pts[:, 0].max() < x0 or pts[:, 0].min() > x1 or
+            pts[:, 1].max() < y0 or pts[:, 1].min() > y1):
             continue
-        out.append(p.points)
+        out.append(pts)
     return out
 
 
-def render(by_layer, out_path):
-    fig, ax = plt.subplots(figsize=(16, 12), dpi=150)
+def render(by_layer, out_path, x0, x1, y0, y1, layers, w_in=16, h_in=12, dpi=150,
+           title=None):
+    fig, ax = plt.subplots(figsize=(w_in, h_in), dpi=dpi)
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(BG)
 
-    x0, x1 = ZOOM_X
-    y0, y1 = ZOOM_Y
-    print(f"  zoom: x=[{x0},{x1}] y=[{y0},{y1}]")
-
-    for key in ORDER:
+    for key in layers:
         polys = by_layer.get(key, [])
         if not polys:
             continue
-        clipped = clip_to_zoom(polys, x0, x1, y0, y1)
+        clipped = clip(polys, x0, x1, y0, y1)
         if not clipped:
             continue
-        color, alpha = COLORS[key]
+        color, alpha, name = COLORS[key]
         coll = PolyCollection(clipped, facecolors=color, edgecolors=color,
                               linewidths=0.0, alpha=alpha, antialiased=True)
         ax.add_collection(coll)
-        print(f"    L{key[0]}/D{key[1]}: rendered {len(clipped)} polygons")
 
-    ax.set_xlim(x0, x1)
-    ax.set_ylim(y0, y1)
-    ax.set_aspect("equal")
-    ax.axis("off")
+    ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
+    ax.set_aspect("equal"); ax.axis("off")
+
+    if title:
+        ax.text(0.01, 0.985, title, transform=ax.transAxes,
+                fontsize=14, color="#dddddd", family="monospace",
+                verticalalignment="top",
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="#1a1a1a",
+                          edgecolor="#444", alpha=0.85))
+
     plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    fig.savefig(out_path, dpi=dpi, facecolor=BG, edgecolor="none",
+                bbox_inches="tight", pad_inches=0)
+    plt.close(fig)
+    print(f"  saved: {out_path}  ({os.path.getsize(out_path)//1024} KB)")
+
+
+def render_panel(by_layer, out_path):
+    """2x2 panels: poly, met1, met2, met3 each on its own."""
+    panels = [
+        ((66, 20), "poly (gates)"),
+        ((68, 20), "met1 (signal/power rails)"),
+        ((69, 20), "met2 (signal routing)"),
+        ((70, 20), "met3 (power straps)"),
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=150)
+    fig.patch.set_facecolor(BG)
+
+    # Use full die bbox so panels are comparable
+    x0, x1, y0, y1 = 0, 670, 0, 434
+
+    for ax, (key, label) in zip(axes.flat, panels):
+        ax.set_facecolor(BG)
+        polys = by_layer.get(key, [])
+        if polys:
+            color, alpha, _name = COLORS[key]
+            coll = PolyCollection(polys, facecolors=color, edgecolors=color,
+                                  linewidths=0.0, alpha=alpha, antialiased=True)
+            ax.add_collection(coll)
+        ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
+        ax.set_aspect("equal"); ax.axis("off")
+        ax.text(0.02, 0.97, label, transform=ax.transAxes,
+                fontsize=14, color="#dddddd", family="monospace",
+                verticalalignment="top",
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="#1a1a1a",
+                          edgecolor="#666", alpha=0.9))
+
+    plt.subplots_adjust(left=0.005, right=0.995, top=0.995, bottom=0.005,
+                        wspace=0.01, hspace=0.01)
     fig.savefig(out_path, dpi=150, facecolor=BG, edgecolor="none",
                 bbox_inches="tight", pad_inches=0)
     plt.close(fig)
     print(f"  saved: {out_path}  ({os.path.getsize(out_path)//1024} KB)")
 
 
-def add_tile_outline(src, dst):
-    """Copy src to dst, overlay white 4x2 tile rectangle + label."""
-    shutil.copy(src, dst)
-    img = Image.open(dst).convert("RGB")
-    draw = ImageDraw.Draw(img)
-    W, H = img.size
-    m = 30
-    draw.rectangle([m, m, W - m, H - m],
-                   outline=(235, 235, 235), width=4)
-    try:
-        font = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 36)
-    except Exception:
-        font = ImageFont.load_default()
-    draw.text((m + 14, m + 10),
-              "tt_um_day4_forklift  -  Sky130A 4x2 tile (1360 x 680 um)",
-              fill=(235, 235, 235), font=font)
-    img.save(dst)
-    print(f"  saved: {dst}  ({os.path.getsize(dst)//1024} KB)")
+def main():
+    os.makedirs(DOCS, exist_ok=True)
+    top, by_layer = load_polys()
+
+    SIGNAL = [(65, 20), (66, 20), (67, 20), (68, 20), (69, 20)]
+    POWER  = [(70, 20), (71, 20), (72, 20)]
+    ALL    = SIGNAL + POWER
+
+    # 1. Logic cluster zoom (signal routing detail)
+    print("\nRendering klayout_layout.png (logic cluster) ...")
+    render(by_layer, f"{DOCS}/klayout_layout.png",
+           x0=290, x1=450, y0=270, y1=390, layers=SIGNAL,
+           w_in=16, h_in=12,
+           title="Logic cluster (160 x 120 um, signal layers only)")
+
+    # 2. Full die overview, all layers
+    print("\nRendering klayout_full_die.png (whole die) ...")
+    render(by_layer, f"{DOCS}/klayout_full_die.png",
+           x0=0, x1=670, y0=0, y1=434, layers=ALL,
+           w_in=16, h_in=10.4,
+           title="Full die — 670 x 434 um, all routing layers")
+
+    # 3. Power grid only (met3/met4/met5)
+    print("\nRendering klayout_power_grid.png (power distribution) ...")
+    render(by_layer, f"{DOCS}/klayout_power_grid.png",
+           x0=0, x1=670, y0=0, y1=434, layers=POWER,
+           w_in=16, h_in=10.4,
+           title="Power distribution network — met3/met4/met5 straps")
+
+    # 4. Per-layer breakdown 2x2 panel
+    print("\nRendering klayout_layer_breakdown.png (per-layer panels) ...")
+    render_panel(by_layer, f"{DOCS}/klayout_layer_breakdown.png")
+
+    print("\nDone.")
 
 
-print("Collecting polygons (flattened)...")
-by_layer = collect_polygons(GDS)
-
-print("\nRendering klayout_layout.png ...")
-render(by_layer, OUT1)
-
-print("\nRendering klayout_caravel_context.png ...")
-add_tile_outline(OUT1, OUT2)
-
-print("\nDone.")
+if __name__ == "__main__":
+    main()
