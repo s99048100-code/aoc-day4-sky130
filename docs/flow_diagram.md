@@ -3,11 +3,11 @@
 ```mermaid
 %%{init: {'theme': 'dark'}}%%
 flowchart TD
-    A[AoC Day 4 題目] --> B[Python Golden Model]
+    A[AoC 2025 Day 4 puzzle] --> B[Python golden model]
     B --> C[Verilog RTL]
-    C --> D[cocotb Simulation\nHW/SW 等價驗證]
-    D --> E[LibreLane PnR\n50 MHz baseline]
-    E --> F[LibreLane PnR\n100 MHz aggressive]
-    F --> G[KLayout GDS 視覺化]
-    G --> H[[Sign-off\nDRC=0 LVS=0]]
+    C --> D[cocotb regression<br/>HW/SW equivalence]
+    D --> E[OpenLane2 PnR<br/>50 MHz baseline]
+    E --> F[OpenLane2 PnR<br/>100 MHz aggressive]
+    F --> G[KLayout GDS render]
+    G --> H[[Sign-off<br/>DRC=0, antenna=0]]
 ```
