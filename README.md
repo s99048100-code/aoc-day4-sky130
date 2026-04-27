@@ -1,6 +1,8 @@
-# sky130-aoc-day4-backend
+# aoc-day4-sky130
 
-AoC 2025 Day 4 forklift cellular automaton — original RTL, Sky130A / Tiny Tapeout 4×2 tile, OpenLane2 PnR, cocotb verified, KLayout GDS render.
+End-to-end ASIC project for AoC 2025 Day 4 (forklift cellular automaton) on Sky130A — original RTL, Python golden model, cocotb regression, yosys formal proof, OpenLane2 PnR (50 MHz baseline + 100 MHz attempt), KLayout GDS visualisation, and a pipelined RTL variant. Targets a Tiny Tapeout 4×2 tile.
+
+Scope: RTL design, simulation, formal verification, synthesis, place-and-route, sign-off, and layout rendering — not a backend-only study.
 
 ---
 
@@ -343,5 +345,5 @@ Puzzle input: https://adventofcode.com/2025/day/4/input
 
 ---
 
-Related: [sky130-aoc-day12-backend](https://github.com/s99048100-code/sky130-aoc-day12-backend) — backend study on an existing RTL; this repo is the follow-up with original RTL.
+Related: [sky130-aoc-day12-backend](https://github.com/s99048100-code/sky130-aoc-day12-backend) — backend-only study using a 3rd-party RTL (Yosys equivalence + PnR sign-off). This repo is the follow-up that adds the missing front-end pieces: original RTL, golden model, cocotb random regression, yosys formal proof, and a pipelined variant — i.e. the full RTL-to-GDS flow on a design I wrote.
 
