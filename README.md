@@ -121,9 +121,7 @@ Full comparison: `ppa_compare.md`.
 
 ## Layout
 
-![layout](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_layout.png?v=2)
-
-![caravel context](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_caravel_context.png?v=2)
+![layout](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_layout.png?v=3)
 
 ---
 
