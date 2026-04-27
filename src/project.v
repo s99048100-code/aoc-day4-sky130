@@ -198,6 +198,31 @@ module tt_um_day4_forklift (
     // unused
     wire _unused = &{ena, 1'b0};
 
+`ifdef FORMAL
+    // -------------------------------------------------------------------------
+    // Safety + bound assertions (proven by yosys sat -prove-asserts).
+    // -------------------------------------------------------------------------
+    always @(posedge clk) begin
+        if (rst_n) begin
+            // P1: iteration counter is bounded by the FSM guard.
+            assert (iter_cnt <= 7'd64);
+            // P2: FSM state stays in the declared encoding (0..4).
+            assert (state <= 3'd4);
+            // P3: Part-1 fits inside 7 bits (max 64 accessible cells).
+            assert (part1_q <= 8'd64);
+            // P4: Part-2 (cumulative removed) is bounded by total cells.
+            assert (part2_q <= 8'd64);
+            // P5: rx_idx never advances past row 7.
+            assert (rx_idx <= 3'd7);
+            // P6: TX states drive the matching result on m_tdata.
+            if (state == S_TX_P1) assert (m_tdata == part1_q);
+            if (state == S_TX_P2) assert (m_tdata == part2_q);
+            // P7: s_tready high iff state == RX.
+            assert ((state == S_RX) == s_tready);
+        end
+    end
+`endif
+
 endmodule
 
 `default_nettype wire

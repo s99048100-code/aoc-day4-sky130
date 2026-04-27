@@ -1,0 +1,19 @@
+# yosys formal flow — safety + bound BMC for tt_um_day4_forklift.
+# Assertions live inside src/project.v under `ifdef FORMAL`.
+# Run via `bash formal/run_formal.sh`.
+
+read_verilog -formal -sv -DFORMAL ../src/project.v
+prep -top tt_um_day4_forklift
+flatten
+# Lower the 8x8 grid memory to flip-flops so yosys' SAT engine can reason
+# about it (the SAT pass does not handle $mem_v2 cells).
+memory -nomap
+memory_map
+opt -fast
+
+# Bounded model check from reset.
+# 12 cycles is enough to exercise one full FSM trajectory:
+#   IDLE -> RX (8 bytes) -> COMPUTE (>=1 iter) -> TX_P1 -> TX_P2 -> IDLE.
+# This matches the default `mode bmc` of SymbiYosys; for unbounded k-induction
+# the invariant set would have to be strengthened (state-space closure).
+sat -verify -prove-asserts -seq 12 -set-init-zero

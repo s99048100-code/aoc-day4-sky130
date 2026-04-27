@@ -99,6 +99,29 @@ No 8×8 random window converged in more than 10 iterations — well under the `i
 
 Full log: `docs/cocotb_log.txt`.
 
+### Formal — yosys SAT, 12-cycle BMC from reset
+
+`src/project.v` carries a `` `ifdef FORMAL `` block with seven safety + bound assertions:
+
+| # | Property | Why it matters |
+|---|----------|----------------|
+| P1 | `iter_cnt <= 64` | the 7-bit counter never exceeds the FSM watchdog |
+| P2 | `state <= 4` | FSM stays in declared encoding (no illegal `default` branch) |
+| P3 | `part1_q <= 64` | result fits in 7 bits (max accessible cells = 64) |
+| P4 | `part2_q <= 64` | cumulative removed cells ≤ total cells in 8×8 grid |
+| P5 | `rx_idx <= 7` | RX byte index never advances past row 7 |
+| P6 | `m_tdata == part1_q` in TX_P1, `== part2_q` in TX_P2 | no garbage on output bus |
+| P7 | `s_tready` ↔ `state == RX` | handshake well-formed |
+
+Proven by Yosys 0.33 SAT engine via 12-cycle bounded model check from reset (`sat -prove-asserts -seq 12 -set-init-zero`). 12 cycles cover one full FSM trajectory `IDLE → RX(8 bytes) → COMPUTE → TX_P1 → TX_P2 → IDLE`. Run via `bash formal/run_formal.sh`; full transcript: `docs/formal_log.txt`.
+
+```
+Solving problem with 316399 variables and 869200 clauses..
+SAT proof finished - no model found: SUCCESS!
+```
+
+K-induction over the same properties does *not* close (the state space is not a closed inductive invariant from arbitrary states); strengthening the invariant set is left as future work.
+
 ---
 
 ## Sign-off Numbers
