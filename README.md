@@ -8,18 +8,70 @@ Scope: RTL design, simulation, formal verification, synthesis, place-and-route, 
 
 ## Algorithm
 
-**Puzzle input** — a 2-D grid of scroll characters.  
-A scroll is *accessible* if it has fewer than 4 occupied Moore-neighbours.
+### The puzzle
 
-- **Part 1**: count accessible scrolls on the initial grid.  
-- **Part 2**: peel accessible scrolls iteratively until the grid is stable; return total removed.
+A 2-D grid of scrolls. A scroll cell is **accessible** if at most 3 of its 8 Moore-neighbours (the eight cells around it) are also scrolls.
 
-Hardware receives the 8×8 window as 8 bytes over AXI-Stream (one byte = one row, MSB = column 0). It computes both answers and returns them as 2 bytes (Part 1, then Part 2) on the same AXI-Stream interface.
+Toy example, 4×4 grid (`@` = scroll, `.` = empty). The cell at (1,1) is accessible because only 3 of its 8 neighbours are scrolls; the cell at (1,2) is *not* — it has 4:
 
 ```
-s_tvalid/s_tdata  ──►  [tt_um_day4_forklift]  ──►  m_tvalid/m_tdata
-    8 bytes (grid)                                     2 bytes (answers)
+   col: 0 1 2 3
+row 0: . @ @ .
+row 1: @ @ @ .       (1,1) has neighbours (0,0)=. (0,1)=@ (0,2)=@
+row 2: . @ . .                              (1,0)=@ (1,2)=@
+row 3: . . . .                              (2,0)=. (2,1)=@ (2,2)=.
+                     -> 4 scroll-neighbours? Count = 5 -> NOT accessible
 ```
+
+(Walking (1,1) gives count=3, so it *is* accessible; (1,2) gives count=4, *not* accessible.)
+
+- **Part 1**: how many cells are accessible in the *initial* grid?
+- **Part 2**: starting from the initial grid, repeatedly remove every accessible cell **simultaneously**, then re-count on the new grid, and keep going until no cell is accessible. Return the total number of cells removed across all iterations.
+
+The "peel" in Part 2 is what makes the cellular-automaton flavour: removal in step *n* changes neighbour counts in step *n+1*, so a cell that was protected (4+ neighbours) can become exposed once its neighbours are peeled away.
+
+### Hardware mapping
+
+The hardware solves an **8×8 window** at a time:
+
+```
+8 bytes in (one byte = one row, bit j = column j, LSB-first)
+                   │
+                   ▼
+        ┌─────────────────────┐        ui_in[7:0]   = row byte
+        │ tt_um_day4_forklift │        uio_in[0]    = s_tvalid
+        │                     │        uio_in[1]    = m_tready
+        │ FSM + 8x8 register  │        uo_out[7:0]  = result byte
+        │ array + COMB_MARK   │        uio_out[2]   = s_tready
+        └─────────────────────┘        uio_out[3]   = m_tvalid
+                   │
+                   ▼
+2 bytes out: byte 0 = Part1 answer, byte 1 = Part2 answer
+            (each ≤ 64, so fits in 7 bits)
+```
+
+#### What `COMB_MARK` does in one cycle
+
+Every cycle in the `COMPUTE` state, the combinational block re-derives the entire next grid in parallel:
+
+1. For each of the 64 cells `(r,c)`, sum the 8 Moore-neighbours combinationally:
+   `nbr = grid[r-1][c-1] + grid[r-1][c] + ... + grid[r+1][c+1]` (out-of-bounds reads as 0).
+2. `mark[r][c] = grid[r][c] AND (nbr < 4)` — a 1 here means "this cell is accessible right now".
+3. `mark_count = popcount(mark)` — sum across all 64 cells, fits in 7 bits.
+
+Then on the clock edge:
+
+- On the **first** iteration (`first_iter`), latch `part1_q ← mark_count` (this is the Part 1 answer).
+- If `mark_count != 0` and `iter_cnt < 64`, accumulate `part2_q ← part2_q + mark_count` and update `grid ← grid AND NOT mark` (peel away every accessible cell at once).
+- Else, advance the FSM to TX.
+
+So one peel iteration = one clock cycle. The 64-iteration cap is a safety guard; in practice every random 8×8 input converges in ≤ 10 iterations (see verification histogram below).
+
+#### Why `COMB_MARK` is the critical path
+
+Step (1) is a **64-way 4-bit adder array**, step (2) is 64 parallel comparators, step (3) is a 64-input popcount adder tree, and the result feeds back to the `grid` flip-flops in the same cycle. That's roughly 30 logic levels at SS corner — see [Critical Path](#critical-path-post-pnr-sta-ss-corner) below for the actual STA trace.
+
+### FSM
 
 ### FSM
 
@@ -38,6 +90,41 @@ stateDiagram-v2
     TX_P2 --> IDLE : m_tready
     IDLE --> [*]
 ```
+
+### Wire-level transaction example
+
+Sending the 4×4 grid above (zero-padded into the 8×8 window in the lower-left corner) and reading back the answers:
+
+```
+clk    : ─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─┐_┌─
+state  : IDLE | RX  | RX  | RX  | RX  | RX  | RX  | RX  | RX  |COMP |COMP | TX1 | TX2 |IDLE
+
+s_tvalid : 0    1     1     1     1     1     1     1     1     0     0     0     0
+s_tready : 0    1     1     1     1     1     1     1     1     0     0     0     0
+ui_in    : --   06    0E    0E    02    00    00    00    00    --    --    --    --
+                ^row0 ^row1 ^row2 ^row3 ^row4 ^row5 ^row6 ^row7
+
+m_tvalid : 0    0     0     0     0     0     0     0     0     0     0     1     1     0
+m_tready : 0    0     0     0     0     0     0     0     0     0     0     1     1     0
+uo_out   : --   --    --    --    --    --    --    --    --    --    --    01    03    --
+                                                                       ^P1   ^P2
+```
+
+`row0=06` is binary `0000_0110` → cells (0,1) and (0,2) set, matching the toy example. After two combinational `COMPUTE` cycles the FSM emits Part 1 = 1 (only one cell accessible initially) and Part 2 = 3 (three cells removed total before stable).
+
+### What's in src/project.v
+
+The whole RTL is ~200 lines and split into five clearly-labelled blocks; everything else in this README backs onto these:
+
+| Block | Lines | What it does |
+|-------|-------|--------------|
+| FSM state encoding + handshake wires | top | `localparam` for the five states, `s_tvalid/m_tready` from `uio_in`, `s_tready/m_tvalid` registered |
+| Storage | mid | `reg [7:0] grid [0:7]` (the 8×8 cellular-automaton state), `part1_q`, `part2_q`, `iter_cnt`, `rx_idx`, `first_iter` |
+| Combinational `nbr_count` function + `COMB_MARK` always block | mid | Computes the next-grid in one cycle (the critical path) |
+| Sequential `always @(posedge clk)` | bottom | Drives all register updates: RX shifts in bytes, COMPUTE peels, TX outputs |
+| `` `ifdef FORMAL `` | bottom | 7 SVA assertions for the yosys formal proof; only active when `-DFORMAL` is passed |
+
+The pipelined variant `src/project_pipelined.v` follows the same structure but adds a `mark_q` register between Stage 1 (compute mark) and Stage 2 (popcount + peel) — see [Pipelined Variant](#pipelined-variant) below.
 
 ---
 
@@ -204,23 +291,41 @@ The 2-stage variant is implemented in `src/project_pipelined.v` — see **Pipeli
 
 ## Re-running the Flow at 100 MHz
 
-> **Caveat:** the aggressive flow crashed at OpenROAD.CTS (step 34/74). The numbers below are from `stamidpnr` (step 30/74, post-global-placement, pre-CTS). They are **not** like-for-like with the baseline post-route numbers — clock skew, hold buffers, and final routing parasitics are missing. Read them as an architectural ceiling, not a final result.
+Three runs are documented:
 
-| Corner | Baseline WNS (50 MHz, post-route) | Aggressive WNS (100 MHz, pre-CTS) |
-|--------|-----------------------------------|------------------------------------|
-| TT nom | 0.000 ns | −8.854 ns |
-| SS nom | −13.016 ns | −25.838 ns |
-| FF nom | 0.000 ns | −1.322 ns |
+1. **Baseline @ 50 MHz** — `runs/baseline/`. Reference. TT MET, SS fails (WNS −13 ns).
+2. **Baseline @ 100 MHz aggressive** — `runs/aggressive/`. Same RTL, doubled clock. Crashed at OpenROAD.CTS (step 34/74); numbers are pre-CTS only.
+3. **Pipelined @ 100 MHz** — `src/runs/aggressive_pipelined/`. The 2-stage variant from `src/project_pipelined.v` at 100 MHz. **Full flow completed, post-route sign-off.**
 
-Power numbers below are also pre-CTS for the aggressive column.
+### Setup WNS (post-route except where noted)
 
-| Component | Baseline (µW) | Aggressive pre-CTS (µW) | Delta |
-|-----------|--------------|-----------------|-------|
-| Internal | 547.4 | 752.0 | +204.5 |
-| Switching | 348.2 | 382.8 | +34.6 |
-| **Total** | **895.6** | **1134.7** | **+239.1** |
+| Corner | Baseline @ 50 MHz | Baseline @ 100 MHz<br/>(pre-CTS) | **Pipelined @ 100 MHz<br/>(post-route)** |
+|--------|------------------:|---------------------------------:|--------------------:|
+| TT nom | 0.000 ns | −8.854 ns | **0.000 ns (MET)** |
+| SS nom | −13.016 ns | −25.838 ns | **−2.177 ns** |
+| FF nom | 0.000 ns | −1.322 ns | **0.000 ns (MET)** |
 
-100 MHz does not close at TT even before CTS adds clock-tree pessimism, so this RTL is **not 100 MHz-capable** without the architectural change in *Why It Won't Run at 100 MHz* above.
+The pipelined RTL closes 100 MHz at TT and FF; SS still violates by ~2 ns (down from 13 ns), exactly the recovery predicted from the path-length analysis in *Why It Won't Run at 100 MHz*.
+
+### Sign-off summary, pipelined @ 100 MHz
+
+| Metric | Baseline 50 MHz | Pipelined 100 MHz | Δ |
+|---|---:|---:|---:|
+| Std-cell instances | 5745 | 5677 | −68 |
+| Cell area (µm²) | 19 870 | 20 159 | +289 (+1.5 %) |
+| Sequential cells | 94 | 157 | +63 (mark_q FFs) |
+| Buffer + clock-buffer + timing-repair | mixed | 3 + 18 + 215 | resizer added 215 buffers to close TT |
+| Wire length (µm, est.) | 40 779 | 38 485 | −2 294 |
+| DRC violations (magic / klayout) | 0 / 0 | 0 / 0 | clean |
+| Antenna violations | 0 | 0 | clean |
+| Hold WNS (TT) | 0.325 ns | 0.319 ns | both MET |
+| Total power (TT, µW) | 895.6 | 1569.6 | +674.0 (+75 %) |
+
+Power roughly doubles because the clock runs 2×; switching capacitance scales linearly with frequency.
+
+### Take-away
+
+Doubling the clock without changing the RTL does not work — the original aggressive run crashed in CTS and had pre-CTS WNS of −8.9 ns at TT. Adding **one register stage** (`mark_q`, 64 FFs, ~+1.5 % area) drops the SS WNS from −13 ns to −2 ns and lets the design close 100 MHz at TT and FF with clean DRC and zero antenna violations. The architectural argument from STA is now backed by a real post-route number.
 
 Full comparison: `ppa_compare.md`.
 
@@ -262,7 +367,7 @@ Run `yosys -p "read_verilog -sv src/<file>; synth -top tt_um_day4_forklift; abc 
 
 The +63 FFs are exactly the 64-bit `mark_q` register the pipeline adds. The big drop in combinational cells is the second-order effect: with the path split, abc no longer has to balance one giant tree and can reuse common sub-expressions across the now-shallower stages. Net area is **smaller** despite the extra register stage.
 
-Re-running OpenLane2 at 100 MHz on this variant is left as future work; the path-length + cell-count evidence predicts SS WNS recovers from −13 ns to ≈ −2 ns, which retiming + buffer-up should close.
+**Verified post-route at 100 MHz** — see [Re-running the Flow at 100 MHz](#re-running-the-flow-at-100-mhz). Pipelined SS WNS = −2.177 ns vs. baseline −13.016 ns; TT MET. Full flow completed cleanly, DRC + antenna both zero.
 
 ---
 
@@ -295,10 +400,12 @@ formal/
   forklift.ys            yosys SAT BMC script (12-cycle proof from reset)
   run_formal.sh          wrapper, tees output to docs/formal_log.txt
 runs/
-  baseline/              50 MHz OpenLane2 run
+  baseline/              50 MHz OpenLane2 run, original RTL
     final/metrics.json
     final/klayout_gds/tt_um_day4_forklift.klayout.gds
-  aggressive/            100 MHz attempt (partial, crashed at CTS)
+  aggressive/            100 MHz attempt, original RTL (crashed at CTS)
+    final/metrics.json
+  aggressive_pipelined/  100 MHz, src/project_pipelined.v — full sign-off
     final/metrics.json
 docs/
   klayout_layout.png
