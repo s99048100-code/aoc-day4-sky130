@@ -7,6 +7,8 @@ against the Python golden model.
 
 import os
 import sys
+from collections import Counter
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, Timer
@@ -15,7 +17,7 @@ from cocotb.triggers import RisingEdge, Timer
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..")))
 
-from day4_golden_model import REGRESSION_CASES, run_case  # noqa: E402
+from day4_golden_model import REGRESSION_CASES, random_grid, run_case  # noqa: E402
 
 
 CLOCK_PERIOD_NS = 20  # 50 MHz
@@ -99,3 +101,47 @@ async def test_regression(dut):
             await RisingEdge(dut.clk)
 
     assert fails == 0, f"{fails} regression case(s) failed"
+
+
+@cocotb.test()
+async def test_random_vectors(dut):
+    """1024 random 8x8 grids vs golden model."""
+    cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+    await reset(dut)
+
+    n_vectors = int(os.environ.get("RANDOM_N", "1024"))
+    base_seed = int(os.environ.get("COCOTB_RANDOM_SEED", "0xC0DECAFE"), 0) \
+                if isinstance(os.environ.get("COCOTB_RANDOM_SEED", "0xC0DECAFE"), str) \
+                else 0xC0DECAFE
+    fails = 0
+    iter_hist = Counter()
+
+    for i in range(n_vectors):
+        gbytes = random_grid(base_seed + i)
+        gold = run_case(gbytes)
+
+        await send_grid(dut, gbytes)
+        b0 = await recv_byte(dut)
+        b1 = await recv_byte(dut)
+
+        ok = (b0 == gold["part1"]) and (b1 == gold["part2"])
+        iter_hist[gold["iterations"]] += 1
+        if not ok:
+            fails += 1
+            dut._log.error(
+                f"  random[{i}] seed={base_seed+i} bytes={gbytes} "
+                f"dut=({b0},{b1}) gold=({gold['part1']},{gold['part2']})"
+            )
+            if fails >= 5:
+                break
+
+        # idle between vectors
+        set_master_in(dut, 0, 0)
+        for _ in range(2):
+            await RisingEdge(dut.clk)
+
+    dut._log.info(f"random regression: {n_vectors - fails}/{n_vectors} PASS")
+    dut._log.info(f"iteration histogram (iterations -> count):")
+    for it in sorted(iter_hist):
+        dut._log.info(f"    iter={it:>2}: {iter_hist[it]:>5}  ({100*iter_hist[it]/n_vectors:5.1f}%)")
+    assert fails == 0, f"{fails} random vector(s) failed"

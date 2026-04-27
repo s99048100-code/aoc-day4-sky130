@@ -68,9 +68,35 @@ FULL PUZZLE: PASS
 REGRESSION : PASS
 ```
 
-### cocotb regression — 8 vectors, Icarus Verilog
+### cocotb regression — 8 directed + 1024 random, Icarus Verilog
 
-All 8 regression vectors pass: `TESTS=1 PASS=1 FAIL=0 SKIP=0`.  
+```
+TEST                          STATUS  SIM TIME (ns)  REAL TIME (s)
+test.test_regression           PASS        4540.00           0.06
+test.test_random_vectors       PASS      547620.00           6.39
+TESTS=2 PASS=2 FAIL=0 SKIP=0
+```
+
+- Directed: 8 hand-built corner cases (empty / full / checker / single corner / surrounded centre / 3×3 block / two clusters / puzzle-window).
+- Random: 1024 deterministic vectors (`seed = 0xC0DECAFE + i`), all match the Python golden model bit-for-bit.
+
+Iteration-count histogram from the random run (= how many peel iterations the DUT needed before stable):
+
+| iters | count | % |
+|------:|------:|---:|
+| 1 | 1 | 0.1% |
+| 2 | 185 | 18.1% |
+| 3 | 325 | 31.7% |
+| 4 | 249 | 24.3% |
+| 5 | 162 | 15.8% |
+| 6 | 62 | 6.1% |
+| 7 | 28 | 2.7% |
+| 8 | 7 | 0.7% |
+| 9 | 3 | 0.3% |
+| 10 | 2 | 0.2% |
+
+No 8×8 random window converged in more than 10 iterations — well under the `iter_cnt == 64` watchdog.
+
 Full log: `docs/cocotb_log.txt`.
 
 ---

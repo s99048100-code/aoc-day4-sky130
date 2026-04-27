@@ -1,6 +1,8 @@
 rm -f results.xml
 "make" -f Makefile results.xml
 make[1]: Entering directory '/mnt/d/aoc_day4/test'
+mkdir -p sim_build
+/usr/bin/iverilog -o sim_build/sim.vvp -s tt_um_day4_forklift -g2012 -g2012 -f sim_build/cmds.f  /mnt/d/aoc_day4/test/../src/project.v
 /usr/local/lib/python3.12/dist-packages/cocotb_tools/makefiles/simulators/Makefile.icarus:66: Using MODULE is deprecated, please use COCOTB_TEST_MODULES instead.
 rm -f results.xml
 COCOTB_TEST_MODULES=test COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=tt_um_day4_forklift TOPLEVEL_LANG=verilog \
@@ -8,13 +10,13 @@ COCOTB_TEST_MODULES=test COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=tt
      -.--ns INFO     gpi                                ..mbed/gpi_embed.cpp:93   in _embed_init_python              Using Python 3.12.4 interpreter at /usr/bin/python3
      -.--ns INFO     gpi                                ../gpi/GpiCommon.cpp:79   in gpi_print_registered_impl       VPI registered
      0.00ns INFO     cocotb                             Running on Icarus Verilog version 12.0 (stable)
-     0.00ns INFO     cocotb                             Seeding Python random module with 1777108901
+     0.00ns INFO     cocotb                             Seeding Python random module with 1777278948
      0.00ns INFO     cocotb                             Initialized cocotb v2.0.1 from /usr/local/lib/python3.12/dist-packages/cocotb
      0.00ns INFO     cocotb.regression                  pytest not found, install it to enable better AssertionError messages
      0.00ns INFO     cocotb                             Running tests
-     0.00ns INFO     cocotb.regression                  running test.test_regression (1/1)
+     0.00ns INFO     cocotb.regression                  running test.test_regression (1/2)
                                                             Run every regression case from the golden model.
-     0.00ns WARNING  py.warnings                        /mnt/d/aoc_day4/test/test.py:76: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+     0.00ns WARNING  py.warnings                        /mnt/d/aoc_day4/test/test.py:78: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
                                                           cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
    100.00ns INFO     cocotb.tt_um_day4_forklift         === Case 01_empty: golden p1=0 p2=0 iter=0
    520.00ns INFO     cocotb.tt_um_day4_forklift             DUT p1=0 p2=0  [PASS]
@@ -33,11 +35,29 @@ COCOTB_TEST_MODULES=test COCOTB_TESTCASE= COCOTB_TEST_FILTER= COCOTB_TOPLEVEL=tt
   3860.00ns INFO     cocotb.tt_um_day4_forklift         === Case 08_puzzle_window: golden p1=9 p2=33 iter=9
   4460.00ns INFO     cocotb.tt_um_day4_forklift             DUT p1=9 p2=33  [PASS]
   4540.00ns INFO     cocotb.regression                  test.test_regression passed
-  4540.00ns INFO     cocotb.regression                  **************************************************************************************
+  4540.00ns INFO     cocotb.regression                  running test.test_random_vectors (2/2)
+                                                            1024 random 8x8 grids vs golden model.
+  4540.00ns WARNING  py.warnings                        /mnt/d/aoc_day4/test/test.py:109: DeprecationWarning: The 'units' argument has been renamed to 'unit'.
+                                                          cocotb.start_soon(Clock(dut.clk, CLOCK_PERIOD_NS, units="ns").start())
+552160.00ns INFO     cocotb.tt_um_day4_forklift         random regression: 1024/1024 PASS
+552160.00ns INFO     cocotb.tt_um_day4_forklift         iteration histogram (iterations -> count):
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 1:     1  (  0.1%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 2:   185  ( 18.1%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 3:   325  ( 31.7%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 4:   249  ( 24.3%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 5:   162  ( 15.8%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 6:    62  (  6.1%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 7:    28  (  2.7%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 8:     7  (  0.7%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter= 9:     3  (  0.3%)
+552160.00ns INFO     cocotb.tt_um_day4_forklift             iter=10:     2  (  0.2%)
+552160.00ns INFO     cocotb.regression                  test.test_random_vectors passed
+552160.00ns INFO     cocotb.regression                  **************************************************************************************
                                                         ** TEST                          STATUS  SIM TIME (ns)  REAL TIME (s)  RATIO (ns/s) **
                                                         **************************************************************************************
-                                                        ** test.test_regression           PASS        4540.00           0.06      81805.27  **
+                                                        ** test.test_regression           PASS        4540.00           0.06      81253.75  **
+                                                        ** test.test_random_vectors       PASS      547620.00           6.39      85694.77  **
                                                         **************************************************************************************
-                                                        ** TESTS=1 PASS=1 FAIL=0 SKIP=0               4540.00           0.06      76982.42  **
+                                                        ** TESTS=2 PASS=2 FAIL=0 SKIP=0             552160.00           6.45      85568.56  **
                                                         **************************************************************************************
 make[1]: Leaving directory '/mnt/d/aoc_day4/test'

@@ -220,6 +220,12 @@ def _mk_from_puzzle(seed: int = 42) -> List[int]:
     return out
 
 
+def random_grid(seed: int) -> List[int]:
+    """Deterministic 8-byte 8x8 grid for cocotb random regression."""
+    rng = random.Random(seed)
+    return [rng.randint(0, 255) for _ in range(GRID_N)]
+
+
 REGRESSION_CASES = [
     ("01_empty",                _mk_empty(),              {"part1": 0, "part2": 0}),
     ("02_full",                  _mk_full(),               {"part1": 4}),                # 4 corners have only 3 neighbors -> accessible
