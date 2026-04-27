@@ -245,7 +245,24 @@ $ cd test && VARIANT=pipelined make
 TESTS=2 PASS=2 FAIL=0 SKIP=0
 ```
 
-Bit-for-bit identical Part1/Part2 results vs. the baseline RTL. The pipelined variant is **simulated only** — re-running OpenLane2 at 100 MHz on it is left as future work; the path-length argument predicts SS WNS recovers from −13 ns to ≈ −2 ns, which retiming + buffer-up should close.
+Bit-for-bit identical Part1/Part2 results vs. the baseline RTL.
+
+### Yosys synthesis comparison (technology-independent)
+
+Run `yosys -p "read_verilog -sv src/<file>; synth -top tt_um_day4_forklift; abc -dff; stat"`:
+
+| | Baseline | Pipelined | Δ |
+|---|---:|---:|---:|
+| Total cells | 2528 | 1986 | −542 (−21 %) |
+| FFs (DFFE + SDFFE) | 94 | 157 | +63 (+67 %) |
+| `$_XOR_`  | 466 | 211 | −255 |
+| `$_XNOR_` | 243 | 194 | −49 |
+| `$_AND_`  | 599 | 255 | −344 |
+| Estimated transistors | 18 132 | 12 822 | −5 310 |
+
+The +63 FFs are exactly the 64-bit `mark_q` register the pipeline adds. The big drop in combinational cells is the second-order effect: with the path split, abc no longer has to balance one giant tree and can reuse common sub-expressions across the now-shallower stages. Net area is **smaller** despite the extra register stage.
+
+Re-running OpenLane2 at 100 MHz on this variant is left as future work; the path-length + cell-count evidence predicts SS WNS recovers from −13 ns to ≈ −2 ns, which retiming + buffer-up should close.
 
 ---
 
