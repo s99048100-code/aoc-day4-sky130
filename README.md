@@ -249,29 +249,17 @@ Bit-for-bit identical Part1/Part2 results vs. the baseline RTL. The pipelined va
 
 ## Layout
 
-### Logic cluster (signal layers)
-
-160 × 120 µm patch of the upper-centre core, signal layers only (poly, diff, li1, met1, met2). The denser region is where the FSM + datapath cells sit; surrounding stripes are filler cells maintaining power-rail continuity.
-
-![layout](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_layout.png?v=4)
-
 ### Full die overview
 
 Full 670 × 434 µm die with all routing layers stacked. The logic cluster is visible in the upper-right; horizontal pink bands are met5 power rails, vertical green bands are met4 power straps, dense pink/cyan body is the standard-cell sea (poly + met1 rails).
 
-![full die](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_full_die.png?v=4)
-
-### Power distribution network only
-
-met3/met4/met5 isolated. Vertical green = met4 VDD/VGND straps, horizontal pink = met5 mesh, orange = met3 in-cluster power feeds. Standard-cell met1 rails are hidden so the upper-level grid is visible by itself.
-
-![power grid](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_power_grid.png?v=4)
+![full die](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_full_die.png?v=5)
 
 ### Per-layer breakdown
 
-Same die, each layer shown alone. Poly (red, fills die — every cell has gates), met1 (purple, every cell row's power rail + signal), met2 (green, signal routing — only where logic exists), met3 (orange, in-cluster power feeds).
+Same die, each layer shown alone. Poly (red, fills die — every cell has gates), met1 (purple, every cell row's power rail + occasional signal), met3 (orange, in-cluster power feeds visible as horizontal stripes near the top-right).
 
-![layer breakdown](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_layer_breakdown.png?v=4)
+![layer breakdown](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_layer_breakdown.png?v=5)
 
 ---
 

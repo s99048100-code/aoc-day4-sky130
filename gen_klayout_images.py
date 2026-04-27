@@ -95,14 +95,13 @@ def render(by_layer, out_path, x0, x1, y0, y1, layers, w_in=16, h_in=12, dpi=150
 
 
 def render_panel(by_layer, out_path):
-    """2x2 panels: poly, met1, met2, met3 each on its own."""
+    """1x3 panels: poly, met1, met3 each on its own."""
     panels = [
         ((66, 20), "poly (gates)"),
         ((68, 20), "met1 (signal/power rails)"),
-        ((69, 20), "met2 (signal routing)"),
         ((70, 20), "met3 (power straps)"),
     ]
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=150)
+    fig, axes = plt.subplots(1, 3, figsize=(24, 6), dpi=150)
     fig.patch.set_facecolor(BG)
 
     # Use full die bbox so panels are comparable
@@ -140,28 +139,14 @@ def main():
     POWER  = [(70, 20), (71, 20), (72, 20)]
     ALL    = SIGNAL + POWER
 
-    # 1. Logic cluster zoom (signal routing detail)
-    print("\nRendering klayout_layout.png (logic cluster) ...")
-    render(by_layer, f"{DOCS}/klayout_layout.png",
-           x0=290, x1=450, y0=270, y1=390, layers=SIGNAL,
-           w_in=16, h_in=12,
-           title="Logic cluster (160 x 120 um, signal layers only)")
-
-    # 2. Full die overview, all layers
+    # Full die overview, all layers
     print("\nRendering klayout_full_die.png (whole die) ...")
     render(by_layer, f"{DOCS}/klayout_full_die.png",
            x0=0, x1=670, y0=0, y1=434, layers=ALL,
            w_in=16, h_in=10.4,
            title="Full die — 670 x 434 um, all routing layers")
 
-    # 3. Power grid only (met3/met4/met5)
-    print("\nRendering klayout_power_grid.png (power distribution) ...")
-    render(by_layer, f"{DOCS}/klayout_power_grid.png",
-           x0=0, x1=670, y0=0, y1=434, layers=POWER,
-           w_in=16, h_in=10.4,
-           title="Power distribution network — met3/met4/met5 straps")
-
-    # 4. Per-layer breakdown 2x2 panel
+    # Per-layer breakdown — 1x3 panel (poly / met1 / met3)
     print("\nRendering klayout_layer_breakdown.png (per-layer panels) ...")
     render_panel(by_layer, f"{DOCS}/klayout_layer_breakdown.png")
 
