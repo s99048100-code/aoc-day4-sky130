@@ -217,23 +217,26 @@ K-induction over the same properties does *not* close (the state space is not a 
 
 ## Sign-off Numbers
 
-Baseline run: 50 MHz, OpenLane2 / Sky130A HD.
+Both runs at 50 MHz, OpenLane2 / Sky130A HD, post-route.
 
-| Metric | Value |
-|--------|-------|
-| Die | 670 × 434 µm |
-| Core | 658.72 × 410.72 µm |
-| Std-cell instances | 5745 |
-| Cell area | 19870.3 µm² |
-| Total wire length | 40779 µm |
-| Vias | 12068 |
-| Antenna violations | 0 |
-| DRC violations | 0 |
-| TT nom setup WNS | 0.000 ns (MET) |
-| Hold WNS (FF min) | 0.107 ns (MET) |
-| Total power (TT nom) | 895.6 µW |
+| Metric | Baseline (`src/project.v`) | Pipelined (`src/project_pipelined.v`) |
+|--------|---------------------------:|-------------------------------------:|
+| Die | 670 × 434 µm | 670 × 434 µm |
+| Core | 658.72 × 410.72 µm | 658.72 × 410.72 µm |
+| Std-cell instances | 5745 | 5653 |
+| Cell area | 19 870.3 µm² | 19 408.6 µm² |
+| Total wire length (est.) | 40 779 µm | 41 496 µm |
+| Antenna violations | 0 | 0 |
+| DRC violations (magic / klayout) | 0 / 0 | 0 / 0 |
+| TT nom setup WNS | 0.000 ns (MET) | 0.000 ns (MET) |
+| **SS nom setup WNS** | **−13.016 ns (FAIL)** | **0.000 ns (MET)** |
+| FF nom setup WNS | 0.000 ns (MET) | 0.000 ns (MET) |
+| Hold WNS (FF min) | 0.107 ns (MET) | 0.111 ns (MET) |
+| Total power (TT nom) | 895.6 µW | 787.5 µW |
 
-SS corner fails (WNS −13.016 ns) — see **Critical Path** below.
+The pipelined RTL closes **all three corners** at 50 MHz — the SS-corner failure that motivated this whole exercise is gone (WNS goes from −13.016 ns to 0.000 ns). It also draws 12 % less power and uses 2.3 % less cell area despite adding 63 sequential cells (`mark_q`). The trade-off is functional throughput: each peel iteration takes 2 cycles instead of 1.
+
+See [Critical Path](#critical-path-post-pnr-sta-ss-corner) for why the baseline failed SS, and [Pipelined Variant](#pipelined-variant) for the architectural fix.
 
 ---
 
@@ -403,7 +406,7 @@ Full 670 × 434 µm die with all routing layers stacked. The logic cluster is vi
 
 Same die size, same 50 MHz target. The logic cluster sits in a different position because OpenLane's placer ran on a different netlist; you can also see the cluster is slightly smaller (−2.3 % area). Same routing layers and same colour map.
 
-![full die pipelined](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_full_die_pipelined.png?v=1)
+![full die pipelined](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_pipelined_layout.png?v=2)
 
 ### Per-layer breakdown
 
