@@ -9,6 +9,7 @@ Outputs four distinct views:
   4. klayout_layer_breakdown.png- 2x2 panel showing poly/met1/met2/met3 alone
 """
 
+import argparse
 import os
 import gdstk
 import numpy as np
@@ -19,8 +20,8 @@ from matplotlib.collections import PolyCollection
 from PIL import Image, ImageDraw, ImageFont
 import shutil
 
-GDS  = "/mnt/d/aoc_day4/runs/baseline/final/klayout_gds/tt_um_day4_forklift.klayout.gds"
-DOCS = "/mnt/d/aoc_day4/docs"
+ROOT = "/mnt/d/aoc_day4"
+DOCS = f"{ROOT}/docs"
 BG   = "#0d0d0d"
 
 # Sky130 layer colours.
@@ -36,9 +37,9 @@ COLORS = {
 }
 
 
-def load_polys():
-    print("Reading GDS...")
-    lib = gdstk.read_gds(GDS)
+def load_polys(gds_path):
+    print(f"Reading GDS: {gds_path}")
+    lib = gdstk.read_gds(gds_path)
     top = lib.top_level()[0]
     print(f"  top cell: {top.name}")
     by_layer = {}
@@ -132,23 +133,36 @@ def render_panel(by_layer, out_path):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", default="baseline",
+                    help="run-tag under runs/ to read GDS from (default: baseline)")
+    ap.add_argument("--suffix", default=None,
+                    help="output filename suffix (default: '' for baseline, '_<run>' otherwise)")
+    args = ap.parse_args()
+
+    gds_path = f"{ROOT}/runs/{args.run}/final/klayout_gds/tt_um_day4_forklift.klayout.gds"
+    if args.suffix is not None:
+        sfx = args.suffix
+    else:
+        sfx = "" if args.run == "baseline" else f"_{args.run}"
+
     os.makedirs(DOCS, exist_ok=True)
-    top, by_layer = load_polys()
+    top, by_layer = load_polys(gds_path)
 
     SIGNAL = [(65, 20), (66, 20), (67, 20), (68, 20), (69, 20)]
     POWER  = [(70, 20), (71, 20), (72, 20)]
     ALL    = SIGNAL + POWER
 
-    # Full die overview, all layers
-    print("\nRendering klayout_full_die.png (whole die) ...")
-    render(by_layer, f"{DOCS}/klayout_full_die.png",
+    full_out = f"{DOCS}/klayout_full_die{sfx}.png"
+    print(f"\nRendering {full_out} (whole die) ...")
+    render(by_layer, full_out,
            x0=0, x1=670, y0=0, y1=434, layers=ALL,
            w_in=16, h_in=10.4,
-           title="Full die — 670 x 434 um, all routing layers")
+           title=f"Full die — {args.run} run, 670 x 434 um, all routing layers")
 
-    # Per-layer breakdown — 1x3 panel (poly / met1 / met3)
-    print("\nRendering klayout_layer_breakdown.png (per-layer panels) ...")
-    render_panel(by_layer, f"{DOCS}/klayout_layer_breakdown.png")
+    panel_out = f"{DOCS}/klayout_layer_breakdown{sfx}.png"
+    print(f"\nRendering {panel_out} (per-layer panels) ...")
+    render_panel(by_layer, panel_out)
 
     print("\nDone.")
 

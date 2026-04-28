@@ -64,3 +64,55 @@ Power scales close to linearly with frequency (2× clock ≈ 1.75× power).
 3. Pass the full OpenLane2 flow with clean DRC and zero antenna violations.
 
 Cost: +1.5 % cell area, +63 sequential cells, +75 % dynamic power (frequency-driven).
+
+---
+
+## Baseline vs Pipelined — same 50 MHz, post-route
+
+To isolate the effect of the architectural change from the clock-rate change, this section compares both RTLs at the **same** 50 MHz target.
+
+- Baseline:  `runs/baseline/final/metrics.json` (`src/project.v`)
+- Pipelined: `runs/pipelined/final/metrics.json` (`src/project_pipelined.v`)
+
+| Metric | Baseline (project.v) | Pipelined (project_pipelined.v) | Delta |
+|--------|---------------------:|---------------------------------:|------:|
+| Std-cell instances | 5745 | 5653 | −92 (−1.6 %) |
+| Cell area (µm²) | 19 870.3 | 19 408.6 | −461.7 (−2.3 %) |
+| Sequential cells | 94 | 157 | +63 (+67 %) — `mark_q` |
+| Multi-input comb cells | 1533 | 1298 | −235 (−15 %) |
+| Timing-repair buffers | 130 | 192 | +62 (mostly hold) |
+| Clock-tree buffers | 9 | 19 | +10 |
+| Wire length (µm, est.) | 40 779 | 41 496 | +717 (+1.8 %) |
+| **TT nom setup WNS (ns)** | 0.000 (MET) | **0.000 (MET)** | — |
+| **SS nom setup WNS (ns)** | **−13.016 (FAIL)** | **0.000 (MET)** | **+13.016 — corner now closes** |
+| **FF nom setup WNS (ns)** | 0.000 (MET) | 0.000 (MET) | — |
+| Hold WNS (FF min, ns) | 0.107 | 0.111 | +0.004 |
+| Internal power (µW) | 547.4 | 532.4 | −15.0 |
+| Switching power (µW) | 348.2 | 255.1 | −93.1 |
+| **Total power (µW)** | **895.6** | **787.5** | **−108.1 (−12.1 %)** |
+| DRC violations | 0 | 0 | clean |
+| Antenna violations | 0 | 0 | clean |
+| Cycles per peel iter | 1 | 2 | +1 |
+
+### What this means
+
+At the same 50 MHz target, the pipelined RTL is **strictly better than the baseline on PPA**:
+
+- **SS corner now closes**. The whole reason the baseline existed was that the SS corner failed by 13 ns. Splitting the COMB_MARK path with a single 64-bit `mark_q` register fixes that completely — SS WNS goes from −13.016 ns to 0.000 ns. No longer "closes only at TT".
+- **Slightly smaller area** (−2.3 %). The 63 added FFs (`mark_q`) cost ~150 µm² of FF cells, but the net combinational logic is smaller because abc balances two shallower trees instead of one giant 30-level tree, so synthesis can pick smaller-drive variants. Net is −461 µm².
+- **12 % less total power**. Frequency is the same, but switching capacitance drops because the combinational logic is shallower (less glitching on the deep XOR/XNOR adder chain). Internal power also drops slightly.
+
+The cost is **functional throughput**: each peel iteration now takes 2 cycles instead of 1, so for the same input window the pipelined design takes ~2× more cycles to reach `STABLE`. To match the baseline's wall-clock throughput the pipelined RTL must run at 100 MHz — which it does (see *Re-running the Flow at 100 MHz* above and `runs/aggressive_pipelined/`).
+
+### Take-away
+
+The pipelined variant gives you a real choice that baseline did not:
+
+| Target | Baseline | Pipelined |
+|---|---|---|
+| 50 MHz, all corners MET | ❌ (SS fails) | ✓ |
+| 100 MHz post-route, TT MET | ❌ (CTS crashes) | ✓ |
+| Equal throughput at 50 MHz | ✓ | — (half throughput) |
+| Lower area + power at 50 MHz | — | ✓ |
+
+For a tape-out where SS-corner closure matters (it does for any production part), pipelined-50 MHz is the right configuration. For maximum throughput, pipelined-100 MHz works at TT (SS slacks −2 ns, recoverable with retiming or a slower SS target).

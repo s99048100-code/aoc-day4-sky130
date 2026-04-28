@@ -367,17 +367,43 @@ Run `yosys -p "read_verilog -sv src/<file>; synth -top tt_um_day4_forklift; abc 
 
 The +63 FFs are exactly the 64-bit `mark_q` register the pipeline adds. The big drop in combinational cells is the second-order effect: with the path split, abc no longer has to balance one giant tree and can reuse common sub-expressions across the now-shallower stages. Net area is **smaller** despite the extra register stage.
 
-**Verified post-route at 100 MHz** — see [Re-running the Flow at 100 MHz](#re-running-the-flow-at-100-mhz). Pipelined SS WNS = −2.177 ns vs. baseline −13.016 ns; TT MET. Full flow completed cleanly, DRC + antenna both zero.
+### Post-route comparison — same 50 MHz target, both RTLs
+
+Pipelined was also re-run through the full OpenLane2 flow at the **same** 50 MHz target as baseline (`runs/pipelined/final/metrics.json`). At equal frequency the architectural change is strictly favourable:
+
+| | Baseline 50 MHz | **Pipelined 50 MHz** | Delta |
+|---|---:|---:|---:|
+| Std-cell instances | 5745 | 5653 | −92 |
+| Cell area (µm²) | 19 870 | 19 408 | −462 (−2.3 %) |
+| **TT nom WNS (ns)** | 0.000 (MET) | 0.000 (MET) | — |
+| **SS nom WNS (ns)** | **−13.016 (FAIL)** | **0.000 (MET)** | **+13.016 — corner closes** |
+| **FF nom WNS (ns)** | 0.000 (MET) | 0.000 (MET) | — |
+| Hold WNS (FF min, ns) | 0.107 | 0.111 | +0.004 |
+| Total power (µW) | 895.6 | 787.5 | **−108 (−12 %)** |
+| DRC / Antenna | 0 / 0 | 0 / 0 | clean |
+| Cycles per peel iter | 1 | 2 | +1 (½ throughput) |
+
+At equal frequency the pipelined variant is smaller, lower-power, and **closes the SS corner** that the baseline failed by 13 ns. Cost is half throughput per cycle, which is recovered by running at 100 MHz.
+
+### Post-route at 100 MHz
+
+Pipelined also closes 100 MHz at TT and FF (post-route, `runs/aggressive_pipelined/`). SS nom WNS = −2.177 ns (down from baseline-aggressive's pre-CTS −25.838 ns). DRC + antenna clean. See [Re-running the Flow at 100 MHz](#re-running-the-flow-at-100-mhz) for the full table.
 
 ---
 
 ## Layout
 
-### Full die overview
+### Full die overview — baseline (`src/project.v`)
 
 Full 670 × 434 µm die with all routing layers stacked. The logic cluster is visible in the upper-right; horizontal pink bands are met5 power rails, vertical green bands are met4 power straps, dense pink/cyan body is the standard-cell sea (poly + met1 rails).
 
-![full die](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_full_die.png?v=5)
+![full die baseline](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_full_die.png?v=5)
+
+### Full die overview — pipelined (`src/project_pipelined.v`)
+
+Same die size, same 50 MHz target. The logic cluster sits in a different position because OpenLane's placer ran on a different netlist; you can also see the cluster is slightly smaller (−2.3 % area). Same routing layers and same colour map.
+
+![full die pipelined](https://github.com/s99048100-code/aoc-day4-sky130/raw/main/docs/klayout_full_die_pipelined.png?v=1)
 
 ### Per-layer breakdown
 
@@ -400,12 +426,15 @@ formal/
   forklift.ys            yosys SAT BMC script (12-cycle proof from reset)
   run_formal.sh          wrapper, tees output to docs/formal_log.txt
 runs/
-  baseline/              50 MHz OpenLane2 run, original RTL
+  baseline/              50 MHz OpenLane2 run, original RTL — sign-off
     final/metrics.json
     final/klayout_gds/tt_um_day4_forklift.klayout.gds
   aggressive/            100 MHz attempt, original RTL (crashed at CTS)
     final/metrics.json
-  aggressive_pipelined/  100 MHz, src/project_pipelined.v — full sign-off
+  pipelined/             50 MHz, src/project_pipelined.v — sign-off, all corners MET
+    final/metrics.json
+    final/klayout_gds/tt_um_day4_forklift.klayout.gds
+  aggressive_pipelined/  100 MHz, src/project_pipelined.v — sign-off (TT/FF MET, SS −2.18ns)
     final/metrics.json
 docs/
   klayout_layout.png

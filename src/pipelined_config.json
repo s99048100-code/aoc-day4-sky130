@@ -1,0 +1,10 @@
+{
+    "DESIGN_NAME": "tt_um_day4_forklift",
+    "VERILOG_FILES": ["dir::./project_pipelined.v"],
+    "CLOCK_PORT": "clk",
+    "CLOCK_PERIOD": 20,
+    "FP_SIZING": "absolute",
+    "DIE_AREA": [0, 0, 670, 434],
+    "PL_TARGET_DENSITY_PCT": 60,
+    "RT_MAX_LAYER": "met4"
+}

@@ -22,6 +22,12 @@ runs/**
 !runs/aggressive_pipelined/final/
 !runs/aggressive_pipelined/final/metrics.json
 !runs/aggressive_pipelined/final/metrics.csv
+!runs/pipelined/
+!runs/pipelined/final/
+!runs/pipelined/final/metrics.json
+!runs/pipelined/final/metrics.csv
+!runs/pipelined/final/klayout_gds/
+!runs/pipelined/final/klayout_gds/*.gds
 
 # OpenLane runs inside src/
 src/runs/
